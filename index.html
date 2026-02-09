@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文档数据看板 - Document Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border-color: rgba(96, 165, 250, 0.5);
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 0.6s ease-out forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+            }
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .trend-up { color: #059669; }
+        .trend-down { color: #dc2626; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50">
+
+    <!-- Header -->
+    <header class="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">文档数据中心</h1>
+                        <p class="text-xs text-slate-500">Document Analytics Dashboard</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <div class="hidden md:flex items-center space-x-2 text-sm text-slate-600">
+                        <span class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></span>
+                        <span>实时数据更新</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="refreshData()" class="p-2 hover:bg-slate-100 rounded-lg transition-colors group" title="刷新数据">
+                            <svg class="w-5 h-5 text-slate-600 group-hover:text-slate-900 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                        <div class="h-8 w-8 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center text-white font-semibold text-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all">
+                            AD
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Filter Bar -->
+        <div class="mb-8 flex flex-wrap gap-4 items-center justify-between animate-fade-in" style="animation-delay: 0.1s">
+            <div class="flex items-center space-x-4">
+                <div class="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+                    <button onclick="setTimeRange('week')" id="btn-week" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-600 text-white shadow-md">本周</button>
+                    <button onclick="setTimeRange('month')" id="btn-month" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 transition-all">本月</button>
+                    <button onclick="setTimeRange('quarter')" id="btn-quarter" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 transition-all">本季度</button>
+                    <button onclick="setTimeRange('year')" id="btn-year" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 transition-all">全年</button>
+                </div>
+            </div>
+            <div class="text-sm text-slate-500">
+                数据更新时间: <span id="update-time" class="text-slate-900 font-mono font-medium">2026-02-06 14:30:25</span>
+            </div>
+        </div>
+
+        <!-- Section 1: Document Status Statistics -->
+        <section class="mb-10 animate-fade-in" style="animation-delay: 0.2s">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-semibold text-slate-900 flex items-center">
+                    <span class="w-1 h-6 bg-blue-600 rounded-full mr-3"></span>
+                    文档状态统计
+                </h2>
+                <button class="text-sm text-blue-600 hover:text-blue-700 transition-colors flex items-center space-x-1 font-medium">
+                    <span>查看详情</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Total Documents -->
+                <div class="glass-card rounded-2xl p-6 stat-card relative overflow-hidden group cursor-pointer bg-white" onclick="showDetail('total')">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-100 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-blue-100 rounded-xl">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                            </div>
+                            <span class="flex items-center text-sm text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-full">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                12.5%
+                            </span>
+                        </div>
+                        <h3 class="text-slate-500 text-sm font-medium mb-1">全部文档</h3>
+                        <p class="text-3xl font-bold text-slate-900 mb-2" id="stat-total">2,847</p>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 mt-3">
+                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Documents -->
+                <div class="glass-card rounded-2xl p-6 stat-card relative overflow-hidden group cursor-pointer bg-white" onclick="showDetail('new')">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-emerald-100 rounded-xl">
+                                <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                            </div>
+                            <span class="flex items-center text-sm text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-full">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                8.2%
+                            </span>
+                        </div>
+                        <h3 class="text-slate-500 text-sm font-medium mb-1">新增文档</h3>
+                        <p class="text-3xl font-bold text-slate-900 mb-2" id="stat-new">342</p>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 mt-3">
+                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 12%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Under Revision -->
+                <div class="glass-card rounded-2xl p-6 stat-card relative overflow-hidden group cursor-pointer bg-white" onclick="showDetail('revision')">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-amber-100 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-amber-100 rounded-xl">
+                                <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </div>
+                            <span class="flex items-center text-sm text-rose-600 font-semibold bg-rose-50 px-2 py-1 rounded-full">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
+                                2.4%
+                            </span>
+                        </div>
+                        <h3 class="text-slate-500 text-sm font-medium mb-1">修订中文档</h3>
+                        <p class="text-3xl font-bold text-slate-900 mb-2" id="stat-revision">86</p>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 mt-3">
+                            <div class="bg-amber-500 h-1.5 rounded-full" style="width: 3%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Revoked Documents -->
+                <div class="glass-card rounded-2xl p-6 stat-card relative overflow-hidden group cursor-pointer bg-white" onclick="showDetail('revoked')">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-rose-100 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-rose-100 rounded-xl">
+                                <svg class="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </div>
+                            <span class="flex items-center text-sm text-slate-500 font-semibold bg-slate-100 px-2 py-1 rounded-full">
+                                <span>-</span>
+                            </span>
+                        </div>
+                        <h3 class="text-slate-500 text-sm font-medium mb-1">已撤销文档</h3>
+                        <p class="text-3xl font-bold text-slate-900 mb-2" id="stat-revoked">24</p>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 mt-3">
+                            <div class="bg-rose-500 h-1.5 rounded-full" style="width: 0.8%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Reading Statistics -->
+        <section class="mb-10 animate-fade-in" style="animation-delay: 0.3s">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-semibold text-slate-900 flex items-center">
+                    <span class="w-1 h-6 bg-purple-600 rounded-full mr-3"></span>
+                    文档阅读量统计
+                </h2>
+                <div class="flex items-center space-x-2">
+                    <select id="chart-type" onchange="changeChartType()" class="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none shadow-sm">
+                        <option value="line">趋势图</option>
+                        <option value="bar">柱状图</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="glass-card rounded-2xl p-6 bg-white">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="lg:col-span-3">
+                        <div class="chart-container">
+                            <canvas id="readingChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <h4 class="text-slate-500 text-sm mb-1">总阅读量</h4>
+                            <p class="text-2xl font-bold text-slate-900" id="total-views">45,892</p>
+                            <p class="text-xs text-emerald-600 mt-1 flex items-center font-medium">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                较上期 +23.5%
+                            </p>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <h4 class="text-slate-500 text-sm mb-1">平均阅读时长</h4>
+                            <p class="text-2xl font-bold text-slate-900">4m 32s</p>
+                            <p class="text-xs text-emerald-600 mt-1 flex items-center font-medium">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                较上期 +5.2%
+                            </p>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <h4 class="text-slate-500 text-sm mb-1">独立访客</h4>
+                            <p class="text-2xl font-bold text-slate-900">12,456</p>
+                            <p class="text-xs text-rose-600 mt-1 flex items-center font-medium">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
+                                较上期 -2.1%
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Top Documents List -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-4">热门文档 Top 5</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-slate-400 font-mono w-6 font-bold">01</span>
+                                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">2026年度产品战略规划</p>
+                                    <p class="text-xs text-slate-500">更新于 2天前</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4 text-sm text-slate-600">
+                                <span class="flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> 3,245</span>
+                                <span class="status-badge bg-emerald-100 text-emerald-700 border border-emerald-200">内部</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-slate-400 font-mono w-6 font-bold">02</span>
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-slate-900 group-hover:text-purple-600 transition-colors">API接口文档 v2.0</p>
+                                    <p class="text-xs text-slate-500">更新于 5天前</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4 text-sm text-slate-600">
+                                <span class="flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> 2,891</span>
+                                <span class="status-badge bg-blue-100 text-blue-700 border border-blue-200">外部</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-slate-400 font-mono w-6 font-bold">03</span>
+                                <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-slate-900 group-hover:text-amber-600 transition-colors">安全合规操作手册</p>
+                                    <p class="text-xs text-slate-500">更新于 1周前</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4 text-sm text-slate-600">
+                                <span class="flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> 2,156</span>
+                                <span class="status-badge bg-emerald-100 text-emerald-700 border border-emerald-200">内部</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Document Type Statistics -->
+        <section class="animate-fade-in" style="animation-delay: 0.4s">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-semibold text-slate-900 flex items-center">
+                    <span class="w-1 h-6 bg-emerald-600 rounded-full mr-3"></span>
+                    文档类型统计
+                </h2>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Pie Chart -->
+                <div class="glass-card rounded-2xl p-6 bg-white">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-4 text-center">文档来源分布</h3>
+                    <div class="relative h-64">
+                        <canvas id="typeChart"></canvas>
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div class="text-center">
+                                <p class="text-3xl font-bold text-slate-900" id="total-docs">2,847</p>
+                                <p class="text-xs text-slate-500">总文档数</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 space-y-3">
+                        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                <span class="text-sm text-slate-700 font-medium">内部文档</span>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm font-semibold text-slate-900" id="internal-count">1,923</p>
+                                <p class="text-xs text-slate-500">通过审核完成</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                                <span class="text-sm text-slate-700 font-medium">外部文档</span>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm font-semibold text-slate-900" id="external-count">924</p>
+                                <p class="text-xs text-slate-500">直接上传至系统</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Stats -->
+                <div class="lg:col-span-2 glass-card rounded-2xl p-6 bg-white">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-sm font-semibold text-slate-900">类型详细分析</h3>
+                        <div class="flex space-x-2">
+                            <button onclick="switchDocView('internal')" id="view-internal" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all">内部</button>
+                            <button onclick="switchDocView('external')" id="view-external" class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 border border-slate-200 transition-all">外部</button>
+                        </div>
+                    </div>
+                    
+                    <div id="internal-details" class="space-y-4">
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-emerald-600">67.5%</p>
+                                <p class="text-xs text-slate-500 mt-1">占比</p>
+                            </div>
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-slate-900">98.2%</p>
+                                <p class="text-xs text-slate-500 mt-1">合规率</p>
+                            </div>
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-slate-900">4.8</p>
+                                <p class="text-xs text-slate-500 mt-1">平均评分</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">技术文档</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full" style="width: 45%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">865</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">产品手册</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full" style="width: 30%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">577</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">培训资料</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full" style="width: 15%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">288</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">管理制度</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full" style="width: 10%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">193</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="external-details" class="space-y-4 hidden">
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-blue-600">32.5%</p>
+                                <p class="text-xs text-slate-500 mt-1">占比</p>
+                            </div>
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-slate-900">85.4%</p>
+                                <p class="text-xs text-slate-500 mt-1">可用率</p>
+                            </div>
+                            <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-2xl font-bold text-slate-900">3.9</p>
+                                <p class="text-xs text-slate-500 mt-1">平均评分</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">客户资料</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-blue-500 h-2 rounded-full" style="width: 40%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">370</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">市场报告</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-blue-500 h-2 rounded-full" style="width: 35%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">323</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">竞品分析</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-blue-500 h-2 rounded-full" style="width: 15%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">139</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-slate-600 font-medium">其他</span>
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-32 bg-slate-200 rounded-full h-2">
+                                        <div class="bg-blue-500 h-2 rounded-full" style="width: 10%"></div>
+                                    </div>
+                                    <span class="text-slate-900 w-12 text-right font-semibold">92</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden transform transition-all scale-95 opacity-0 shadow-2xl border border-slate-200" id="modal-content">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-semibold text-slate-900" id="modal-title">文档详情</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[60vh]" id="modal-body">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chart configurations
+        let readingChart;
+        let typeChart;
+        let currentTimeRange = 'week';
+        
+        // Initialize Charts
+        document.addEventListener('DOMContentLoaded', function() {
+            initReadingChart();
+            initTypeChart();
+            updateTime();
+        });
+
+        function initReadingChart() {
+            const ctx = document.getElementById('readingChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(139, 92, 246, 0.2)');
+            gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
+
+            readingChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    datasets: [{
+                        label: '阅读量',
+                        data: [3200, 4500, 4100, 4800, 5200, 3800, 4292],
+                        borderColor: '#8b5cf6',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#8b5cf6',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: 'rgba(226, 232, 240, 0.8)',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return '阅读量: ' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(226, 232, 240, 0.5)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#64748b'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(226, 232, 240, 0.5)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#64748b',
+                                callback: function(value) {
+                                    return value >= 1000 ? (value/1000) + 'k' : value;
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        function initTypeChart() {
+            const ctx = document.getElementById('typeChart').getContext('2d');
+            
+            typeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['内部文档', '外部文档'],
+                    datasets: [{
+                        data: [1923, 924],
+                        backgroundColor: [
+                            '#10b981',
+                            '#3b82f6'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: 'rgba(226, 232, 240, 0.8)',
+                            borderWidth: 1,
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return label + ': ' + value + ' (' + percentage + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Time Range Selection
+        function setTimeRange(range) {
+            currentTimeRange = range;
+            
+            // Update button styles
+            ['week', 'month', 'quarter', 'year'].forEach(r => {
+                const btn = document.getElementById('btn-' + r);
+                if (r === range) {
+                    btn.className = 'px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-600 text-white shadow-md';
+                } else {
+                    btn.className = 'px-4 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 transition-all';
+                }
+            });
+
+            // Update chart data based on range
+            updateChartData(range);
+            refreshStats();
+        }
+
+        function updateChartData(range) {
+            let labels, data;
+            
+            switch(range) {
+                case 'week':
+                    labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                    data = [3200, 4500, 4100, 4800, 5200, 3800, 4292];
+                    break;
+                case 'month':
+                    labels = ['第1周', '第2周', '第3周', '第4周'];
+                    data = [28500, 32200, 29800, 45892];
+                    break;
+                case 'quarter':
+                    labels = ['1月', '2月', '3月'];
+                    data = [125000, 142000, 136392];
+                    break;
+                case 'year':
+                    labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+                    data = [403392, 485000, 462000, 45892];
+                    break;
+            }
+            
+            readingChart.data.labels = labels;
+            readingChart.data.datasets[0].data = data;
+            readingChart.update();
+        }
+
+        function changeChartType() {
+            const type = document.getElementById('chart-type').value;
+            readingChart.config.type = type;
+            readingChart.update();
+        }
+
+        // Document Type View Switching
+        function switchDocView(type) {
+            const internalBtn = document.getElementById('view-internal');
+            const externalBtn = document.getElementById('view-external');
+            const internalDetails = document.getElementById('internal-details');
+            const externalDetails = document.getElementById('external-details');
+            
+            if (type === 'internal') {
+                internalBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all';
+                externalBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 border border-slate-200 transition-all';
+                internalDetails.classList.remove('hidden');
+                externalDetails.classList.add('hidden');
+            } else {
+                externalBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 border border-blue-200 transition-all';
+                internalBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:text-slate-900 border border-slate-200 transition-all';
+                externalDetails.classList.remove('hidden');
+                internalDetails.classList.add('hidden');
+            }
+        }
+
+        // Refresh Data Simulation
+        function refreshData() {
+            const btn = document.querySelector('button[onclick="refreshData()"] svg');
+            btn.classList.add('animate-spin');
+            
+            setTimeout(() => {
+                btn.classList.remove('animate-spin');
+                refreshStats();
+                updateTime();
+                
+                // Show notification
+                showNotification('数据已更新');
+            }, 1000);
+        }
+
+        function refreshStats() {
+            // Simulate data changes
+            const multiplier = currentTimeRange === 'week' ? 1 : currentTimeRange === 'month' ? 4.3 : currentTimeRange === 'quarter' ? 13 : 52;
+            
+            animateValue('stat-total', 2847 * multiplier, 2000);
+            animateValue('stat-new', 342 * multiplier, 2000);
+            animateValue('stat-revision', 86 * multiplier, 2000);
+            animateValue('stat-revoked', 24 * multiplier, 2000);
+            animateValue('total-views', 45892 * multiplier, 2000);
+        }
+
+        function animateValue(id, end, duration) {
+            const obj = document.getElementById(id);
+            const start = parseInt(obj.innerHTML.replace(/,/g, '')) || 0;
+            const range = end - start;
+            const minTimer = 50;
+            let stepTime = Math.abs(Math.floor(duration / range));
+            stepTime = Math.max(stepTime, minTimer);
+            
+            let startTime = new Date().getTime();
+            let endTime = startTime + duration;
+            let timer;
+            
+            function run() {
+                let now = new Date().getTime();
+                let remaining = Math.max((endTime - now) / duration, 0);
+                let value = Math.round(end - (remaining * range));
+                obj.innerHTML = value.toLocaleString();
+                if (value == end) {
+                    clearInterval(timer);
+                }
+            }
+            
+            timer = setInterval(run, stepTime);
+            run();
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.getFullYear() + '-' + 
+                          String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                          String(now.getDate()).padStart(2, '0') + ' ' + 
+                          String(now.getHours()).padStart(2, '0') + ':' + 
+                          String(now.getMinutes()).padStart(2, '0') + ':' + 
+                          String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('update-time').innerText = timeStr;
+        }
+
+        // Modal Functions
+        function showDetail(type) {
+            const modal = document.getElementById('detail-modal');
+            const content = document.getElementById('modal-content');
+            const title = document.getElementById('modal-title');
+            const body = document.getElementById('modal-body');
+            
+            const titles = {
+                'total': '全部文档详情',
+                'new': '新增文档详情',
+                'revision': '修订中文档详情',
+                'revoked': '已撤销文档详情'
+            };
+            
+            title.innerText = titles[type] || '文档详情';
+            
+            // Generate mock detail content
+            const mockData = generateMockDetailData(type);
+            body.innerHTML = mockData;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function generateMockDetailData(type) {
+            const docs = [
+                {name: '2026年度战略规划.pdf', author: '张经理', date: '2026-02-06', size: '2.4 MB'},
+                {name: '产品需求文档v3.docx', author: '李产品', date: '2026-02-05', size: '1.8 MB'},
+                {name: '技术架构设计.pptx', author: '王架构', date: '2026-02-04', size: '5.2 MB'},
+                {name: 'API接口文档.md', author: '刘开发', date: '2026-02-03', size: '456 KB'},
+                {name: '用户调研报告.pdf', author: '陈调研', date: '2026-02-02', size: '3.1 MB'}
+            ];
+            
+            let html = '<div class="space-y-3">';
+            docs.forEach((doc, index) => {
+                html += `
+                    <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-blue-300 transition-colors">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-slate-900">${doc.name}</p>
+                                <p class="text-xs text-slate-500">${doc.author} · ${doc.date}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-slate-700 font-medium">${doc.size}</p>
+                            <button class="text-xs text-blue-600 hover:text-blue-700 mt-1 font-medium">查看详情</button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            return html;
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('detail-modal');
+            const content = document.getElementById('modal-content');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function showNotification(message) {
+            const notif = document.createElement('div');
+            notif.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-10 opacity-0 transition-all duration-300 z-50 flex items-center space-x-2';
+            notif.innerHTML = `
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(notif);
+            
+            setTimeout(() => {
+                notif.classList.remove('translate-y-10', 'opacity-0');
+            }, 100);
+            
+            setTimeout(() => {
+                notif.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => notif.remove(), 300);
+            }, 3000);
+        }
+
+        // Close modal on outside click
+        document.getElementById('detail-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
